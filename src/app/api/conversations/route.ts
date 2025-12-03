@@ -114,9 +114,9 @@ export async function GET(request: NextRequest) {
     for (const msg of latestMessages || []) {
       if (!messagesByProspect.has(msg.prospect_id)) {
         messagesByProspect.set(msg.prospect_id, {
-          lastMessage: msg.message_content,
-          lastMessageTime: msg.sent_at,
-          direction: msg.message_direction,
+          lastMessage: msg.message_content || '',
+          lastMessageTime: msg.sent_at || '',
+          direction: msg.message_direction || 'outbound',
           messageCount: 1,
         })
       } else {
