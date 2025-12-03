@@ -29,6 +29,18 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching SMS responses:', smsError)
     }
 
+    // Get unique prospects who responded (for response rate calculation)
+    const { data: respondersData, error: respondersError } = await supabase
+      .from('sms_conversations')
+      .select('prospect_id')
+      .eq('message_direction', 'inbound')
+
+    if (respondersError) {
+      console.error('Error fetching responders:', respondersError)
+    }
+
+    const uniqueRespondersCount = new Set(respondersData?.map(r => r.prospect_id) || []).size
+
     // Get reconnected = prospects that responded (interested or not_interested)
     const { count: totalReconnected, error: reconnectedError } = await supabase
       .from('prospects')
@@ -73,9 +85,9 @@ export async function GET(request: NextRequest) {
       campaignData = campaign
     }
 
-    // Calculate response rate
+    // Calculate response rate (unique responders / contacted)
     const responseRate = uniqueContactedCount > 0
-      ? ((totalSmsResponses || 0) / uniqueContactedCount) * 100
+      ? (uniqueRespondersCount / uniqueContactedCount) * 100
       : 0
 
     // Calculate reconnection rate
