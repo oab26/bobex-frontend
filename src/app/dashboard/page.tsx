@@ -18,14 +18,15 @@ export default function DashboardPage() {
   // Calculate response distribution for pie chart
   const responseDistribution = metrics
     ? [
-        { name: 'Callbacks', value: metrics.totalCallbacks, color: CHART_COLORS.primary },
-        { name: 'SMS Responses', value: metrics.totalSmsResponses, color: CHART_COLORS.purple },
+        { name: 'SMS Responses', value: metrics.totalSmsResponses, color: CHART_COLORS.primary },
+        { name: 'Interested', value: metrics.totalInterested || 0, color: CHART_COLORS.secondary },
+        { name: 'Not Interested', value: metrics.totalNotInterested || 0, color: CHART_COLORS.danger },
         {
           name: 'No Response',
-          value: Math.max(0, metrics.totalContacted - metrics.totalCallbacks - metrics.totalSmsResponses),
+          value: Math.max(0, metrics.totalContacted - metrics.totalSmsResponses),
           color: '#e2e8f0',
         },
-      ]
+      ].filter(item => item.value > 0)
     : []
 
   return (

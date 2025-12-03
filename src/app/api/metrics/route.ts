@@ -5,31 +5,58 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const campaignId = searchParams.get('campaignId')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
 
     const supabase = await createClient()
 
-    // Get daily KPI summary from view
-    let query = supabase
-      .from('daily_kpi_summary')
-      .select('*')
-      .order('metric_date', { ascending: false })
+    // Get unique prospects contacted (for metrics)
+    const { data: uniqueProspectsData, error: contactedError } = await supabase
+      .from('contact_attempts')
+      .select('prospect_id')
 
-    if (startDate) {
-      query = query.gte('metric_date', startDate)
-    }
-    if (endDate) {
-      query = query.lte('metric_date', endDate)
+    if (contactedError) {
+      console.error('Error fetching contacted prospects:', contactedError)
     }
 
-    const { data: kpiData, error: kpiError } = await query.limit(30)
+    const uniqueContactedCount = new Set(uniqueProspectsData?.map(p => p.prospect_id) || []).size
 
-    if (kpiError) {
-      return NextResponse.json(
-        { success: false, error: { code: 'QUERY_ERROR', message: kpiError.message } },
-        { status: 500 }
-      )
+    // Get SMS responses = inbound messages in sms_conversations
+    const { count: totalSmsResponses, error: smsError } = await supabase
+      .from('sms_conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('message_direction', 'inbound')
+
+    if (smsError) {
+      console.error('Error fetching SMS responses:', smsError)
+    }
+
+    // Get reconnected = prospects that responded (interested or not_interested)
+    const { count: totalReconnected, error: reconnectedError } = await supabase
+      .from('prospects')
+      .select('id', { count: 'exact', head: true })
+      .in('qualification_status', ['interested', 'not_interested'])
+
+    if (reconnectedError) {
+      console.error('Error fetching reconnected count:', reconnectedError)
+    }
+
+    // Get interested count
+    const { count: totalInterested, error: interestedError } = await supabase
+      .from('prospects')
+      .select('id', { count: 'exact', head: true })
+      .eq('qualification_status', 'interested')
+
+    if (interestedError) {
+      console.error('Error fetching interested count:', interestedError)
+    }
+
+    // Get not interested count
+    const { count: totalNotInterested, error: notInterestedError } = await supabase
+      .from('prospects')
+      .select('id', { count: 'exact', head: true })
+      .eq('qualification_status', 'not_interested')
+
+    if (notInterestedError) {
+      console.error('Error fetching not interested count:', notInterestedError)
     }
 
     // Also get campaign-specific data if campaignId provided
@@ -46,67 +73,35 @@ export async function GET(request: NextRequest) {
       campaignData = campaign
     }
 
-    // Aggregate the KPI data
-    const aggregated = kpiData?.reduce(
-      (acc, row) => ({
-        totalContacted: acc.totalContacted + (row.total_contacted || 0),
-        totalCallbacks: acc.totalCallbacks + (row.total_callbacks || 0),
-        totalSmsResponses: acc.totalSmsResponses + (row.total_sms_responses || 0),
-        totalReconnected: acc.totalReconnected + (row.total_reconnected || 0),
-        totalInterested: acc.totalInterested + (row.total_interested || 0),
-        totalNotInterested: acc.totalNotInterested + (row.total_not_interested || 0),
-      }),
-      {
-        totalContacted: 0,
-        totalCallbacks: 0,
-        totalSmsResponses: 0,
-        totalReconnected: 0,
-        totalInterested: 0,
-        totalNotInterested: 0,
-      }
-    ) || {
-      totalContacted: 0,
-      totalCallbacks: 0,
-      totalSmsResponses: 0,
-      totalReconnected: 0,
-      totalInterested: 0,
-      totalNotInterested: 0,
-    }
-
-    // Calculate reconnection rate
-    const reconnectionRate = aggregated.totalContacted > 0
-      ? (aggregated.totalReconnected / aggregated.totalContacted) * 100
+    // Calculate response rate
+    const responseRate = uniqueContactedCount > 0
+      ? ((totalSmsResponses || 0) / uniqueContactedCount) * 100
       : 0
 
-    // Calculate trends (compare last 7 days to previous 7 days)
-    const recentData = kpiData?.slice(0, 7) || []
-    const previousData = kpiData?.slice(7, 14) || []
-
-    const recentTotal = recentData.reduce((acc, row) => acc + (row.total_contacted || 0), 0)
-    const previousTotal = previousData.reduce((acc, row) => acc + (row.total_contacted || 0), 0)
-
-    const contactedChange = previousTotal > 0
-      ? ((recentTotal - previousTotal) / previousTotal) * 100
+    // Calculate reconnection rate
+    const reconnectionRate = uniqueContactedCount > 0
+      ? ((totalReconnected || 0) / uniqueContactedCount) * 100
       : 0
 
     return NextResponse.json({
       success: true,
       data: {
-        ...aggregated,
+        totalContacted: uniqueContactedCount,
+        totalSmsResponses: totalSmsResponses || 0,
+        totalReconnected: totalReconnected || 0,
+        totalInterested: totalInterested || 0,
+        totalNotInterested: totalNotInterested || 0,
+        responseRate: Number(responseRate.toFixed(2)),
         reconnectionRate: Number(reconnectionRate.toFixed(2)),
         trends: {
-          contactedChange: Number(contactedChange.toFixed(1)),
-          callbacksChange: 0, // TODO: Calculate
-          smsResponsesChange: 0, // TODO: Calculate
-          reconnectedChange: 0, // TODO: Calculate
-          rateChange: 0, // TODO: Calculate
+          contactedChange: 0,
+          smsResponsesChange: 0,
+          reconnectedChange: 0,
+          rateChange: 0,
         },
         campaignData,
-        rawData: kpiData,
       },
       meta: {
-        periodStart: startDate || kpiData?.[kpiData.length - 1]?.metric_date,
-        periodEnd: endDate || kpiData?.[0]?.metric_date,
         lastUpdated: new Date().toISOString(),
       },
     })

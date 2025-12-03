@@ -63,12 +63,6 @@ export const KPI_CONFIGS = {
     color: 'blue' as const,
     icon: 'Users',
   },
-  totalCallbacks: {
-    title: 'Callbacks',
-    unit: 'calls',
-    color: 'green' as const,
-    icon: 'PhoneIncoming',
-  },
   totalSmsResponses: {
     title: 'SMS Responses',
     unit: 'messages',
@@ -81,8 +75,8 @@ export const KPI_CONFIGS = {
     color: 'purple' as const,
     icon: 'UserCheck',
   },
-  reconnectionRate: {
-    title: 'Reconnection Rate',
+  responseRate: {
+    title: 'Response Rate',
     unit: '%',
     color: 'green' as const,
     icon: 'TrendingUp',

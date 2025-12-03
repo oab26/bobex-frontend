@@ -1,43 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { format } from 'date-fns'
+import { format, subDays, eachDayOfInterval } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const campaignId = searchParams.get('campaignId')
-    const startDate = searchParams.get('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-    const endDate = searchParams.get('endDate') || new Date().toISOString()
-    const interval = searchParams.get('interval') || 'daily' // daily, weekly
+    const interval = searchParams.get('interval') || 'daily'
+    const days = interval === 'weekly' ? 28 : 7
 
     const supabase = await createClient()
 
-    // Get data from daily_kpi_summary view
-    let query = supabase
-      .from('daily_kpi_summary')
-      .select('*')
-      .gte('metric_date', startDate.split('T')[0])
-      .lte('metric_date', endDate.split('T')[0])
-      .order('metric_date', { ascending: true })
+    // Get date range
+    const endDate = new Date()
+    const startDate = subDays(endDate, days)
 
-    const { data: kpiData, error } = await query
+    // Generate all dates in range
+    const allDates = eachDayOfInterval({ start: startDate, end: endDate })
+      .map(date => format(date, 'yyyy-MM-dd'))
 
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: { code: 'QUERY_ERROR', message: error.message } },
-        { status: 500 }
-      )
-    }
+    // Get contact attempts grouped by date
+    const { data: contactsData } = await supabase
+      .from('contact_attempts')
+      .select('prospect_id, sent_at')
+      .gte('sent_at', startDate.toISOString())
+      .lte('sent_at', endDate.toISOString())
 
-    // Transform data for chart
-    const trendData = (kpiData || []).map(row => ({
-      date: row.metric_date,
-      contacts: row.total_contacted || 0,
-      callbacks: row.total_callbacks || 0,
-      smsResponses: row.total_sms_responses || 0,
-      reconnected: row.total_reconnected || 0,
-      reconnectionRate: row.avg_reconnection_rate || 0,
-    }))
+    // Get SMS responses (inbound) grouped by date
+    const { data: smsData } = await supabase
+      .from('sms_conversations')
+      .select('id, sent_at')
+      .eq('message_direction', 'inbound')
+      .gte('sent_at', startDate.toISOString())
+      .lte('sent_at', endDate.toISOString())
+
+    // Get prospects qualification status changes
+    const { data: prospectsData } = await supabase
+      .from('prospects')
+      .select('id, qualification_status, updated_at')
+      .in('qualification_status', ['interested', 'not_interested'])
+
+    // Aggregate data by date
+    const contactsByDate: Record<string, Set<string>> = {}
+    const smsByDate: Record<string, number> = {}
+    const reconnectedByDate: Record<string, number> = {}
+
+    // Initialize all dates
+    allDates.forEach(date => {
+      contactsByDate[date] = new Set()
+      smsByDate[date] = 0
+      reconnectedByDate[date] = 0
+    })
+
+    // Count contacts by date (unique prospects)
+    contactsData?.forEach(contact => {
+      if (contact.sent_at) {
+        const date = format(new Date(contact.sent_at), 'yyyy-MM-dd')
+        if (contactsByDate[date]) {
+          contactsByDate[date].add(contact.prospect_id)
+        }
+      }
+    })
+
+    // Count SMS responses by date
+    smsData?.forEach(sms => {
+      if (sms.sent_at) {
+        const date = format(new Date(sms.sent_at), 'yyyy-MM-dd')
+        if (smsByDate[date] !== undefined) {
+          smsByDate[date]++
+        }
+      }
+    })
+
+    // Count reconnected by date (when status changed)
+    prospectsData?.forEach(prospect => {
+      if (prospect.updated_at) {
+        const date = format(new Date(prospect.updated_at), 'yyyy-MM-dd')
+        if (reconnectedByDate[date] !== undefined) {
+          reconnectedByDate[date]++
+        }
+      }
+    })
+
+    // Build trend data
+    const trendData = allDates.map(date => {
+      const contacts = contactsByDate[date]?.size || 0
+      const smsResponses = smsByDate[date] || 0
+      const reconnected = reconnectedByDate[date] || 0
+      const reconnectionRate = contacts > 0
+        ? Number(((reconnected / contacts) * 100).toFixed(1))
+        : 0
+
+      return {
+        date,
+        contacts,
+        smsResponses,
+        reconnected,
+        reconnectionRate,
+      }
+    })
 
     // If weekly interval, aggregate by week
     let aggregatedData = trendData
@@ -56,7 +116,6 @@ export async function GET(request: NextRequest) {
           weeklyMap[weekKey] = {
             date: weekKey,
             contacts: 0,
-            callbacks: 0,
             smsResponses: 0,
             reconnected: 0,
             reconnectionRate: 0,
@@ -64,7 +123,6 @@ export async function GET(request: NextRequest) {
         }
 
         weeklyMap[weekKey].contacts += day.contacts
-        weeklyMap[weekKey].callbacks += day.callbacks
         weeklyMap[weekKey].smsResponses += day.smsResponses
         weeklyMap[weekKey].reconnected += day.reconnected
       })
@@ -93,12 +151,6 @@ export async function GET(request: NextRequest) {
         color: '#3B82F6',
       },
       {
-        id: 'callbacks',
-        label: 'Callbacks',
-        data: aggregatedData.map(d => d.callbacks),
-        color: '#10B981',
-      },
-      {
         id: 'smsResponses',
         label: 'SMS Responses',
         data: aggregatedData.map(d => d.smsResponses),
@@ -108,7 +160,7 @@ export async function GET(request: NextRequest) {
         id: 'reconnected',
         label: 'Reconnected',
         data: aggregatedData.map(d => d.reconnected),
-        color: '#8B5CF6',
+        color: '#10B981',
       },
     ]
 

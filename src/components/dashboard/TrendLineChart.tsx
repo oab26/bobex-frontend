@@ -95,22 +95,22 @@ export function TrendLineChart({
             <Line
               yAxisId="left"
               type="monotone"
-              dataKey="callbacks"
-              stroke="#10B981"
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
-              name="Callbacks"
-            />
-            <Line
-              yAxisId="left"
-              type="monotone"
               dataKey="smsResponses"
               stroke="#F59E0B"
               strokeWidth={2}
               dot={{ r: 3 }}
               activeDot={{ r: 5 }}
-              name="SMS"
+              name="SMS Responses"
+            />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="reconnected"
+              stroke="#10B981"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              activeDot={{ r: 5 }}
+              name="Reconnected"
             />
             <Line
               yAxisId="right"

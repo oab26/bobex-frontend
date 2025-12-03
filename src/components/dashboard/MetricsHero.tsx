@@ -3,7 +3,6 @@
 import { KPICard } from './KPICard'
 import {
   Users,
-  PhoneIncoming,
   MessageSquare,
   UserCheck,
   TrendingUp,
@@ -26,7 +25,7 @@ export function MetricsHero({ data, loading = false }: MetricsHeroProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       <KPICard
         title="Total Contacted"
         value={data?.totalContacted || 0}
@@ -34,15 +33,6 @@ export function MetricsHero({ data, loading = false }: MetricsHeroProps) {
         trend={getTrend(data?.trends?.contactedChange)}
         icon={<Users className="h-5 w-5" />}
         color="blue"
-        loading={loading}
-      />
-      <KPICard
-        title="Callbacks"
-        value={data?.totalCallbacks || 0}
-        unit="calls"
-        trend={getTrend(data?.trends?.callbacksChange)}
-        icon={<PhoneIncoming className="h-5 w-5" />}
-        color="green"
         loading={loading}
       />
       <KPICard
@@ -64,8 +54,8 @@ export function MetricsHero({ data, loading = false }: MetricsHeroProps) {
         loading={loading}
       />
       <KPICard
-        title="Reconnection Rate"
-        value={data?.reconnectionRate || 0}
+        title="Response Rate"
+        value={data?.responseRate || 0}
         trend={getTrend(data?.trends?.rateChange)}
         icon={<TrendingUp className="h-5 w-5" />}
         color="green"

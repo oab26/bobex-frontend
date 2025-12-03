@@ -2,13 +2,14 @@
 
 export interface KPIData {
   totalContacted: number
-  totalCallbacks: number
   totalSmsResponses: number
   totalReconnected: number
+  totalInterested: number
+  totalNotInterested: number
+  responseRate: number
   reconnectionRate: number
   trends?: {
     contactedChange: number
-    callbacksChange: number
     smsResponsesChange: number
     reconnectedChange: number
     rateChange: number
@@ -48,7 +49,6 @@ export interface FunnelData {
 export interface TrendDataPoint {
   date: string
   contacts: number
-  callbacks: number
   smsResponses: number
   reconnected: number
   reconnectionRate: number
