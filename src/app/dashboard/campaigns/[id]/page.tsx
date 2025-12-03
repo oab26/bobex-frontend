@@ -22,9 +22,10 @@ import {
   MessageSquare,
   TrendingUp,
   Phone,
-  Mail,
   Settings,
   Clock,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 
@@ -48,6 +49,8 @@ interface Activity {
   type: string
   status: string
   sentAt: string | null
+  message: string | null
+  direction: 'inbound' | 'outbound'
   prospect: {
     id: string
     firstname: string | null
@@ -91,6 +94,7 @@ const activityStatusColors: Record<string, string> = {
   failed: 'text-red-600',
   queued: 'text-yellow-600',
   pending: 'text-gray-600',
+  received: 'text-green-600',
 }
 
 function LoadingSkeleton() {
@@ -129,6 +133,12 @@ function NotFoundState() {
   )
 }
 
+function truncateMessage(message: string | null, maxLength: number = 50): string {
+  if (!message) return '-'
+  if (message.length <= maxLength) return message
+  return message.substring(0, maxLength) + '...'
+}
+
 export default function CampaignDetailPage() {
   const params = useParams()
   const campaignId = params.id as string
@@ -157,6 +167,23 @@ export default function CampaignDetailPage() {
     if (!prospect) return 'Unknown'
     const name = [prospect.firstname, prospect.lastname].filter(Boolean).join(' ')
     return name || 'Unknown'
+  }
+
+  const getActivityIcon = (activity: Activity) => {
+    if (activity.type === 'missed_call' || activity.type === 'call') {
+      return <Phone className="h-4 w-4 text-orange-500" />
+    }
+    // SMS - show direction with colors
+    if (activity.direction === 'inbound') {
+      return <ArrowDownLeft className="h-4 w-4 text-green-500" />
+    }
+    return <ArrowUpRight className="h-4 w-4 text-blue-500" />
+  }
+
+  const getActivityLabel = (activity: Activity) => {
+    if (activity.type === 'missed_call') return 'Missed Call'
+    if (activity.type === 'call') return 'Call'
+    return activity.direction === 'inbound' ? 'SMS In' : 'SMS Out'
   }
 
   return (
@@ -300,8 +327,8 @@ export default function CampaignDetailPage() {
                 <TableRow>
                   <TableHead>Prospect</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead className="min-w-[200px]">Message</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Phone</TableHead>
                   <TableHead className="text-right">Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -318,21 +345,19 @@ export default function CampaignDetailPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {activity.type === 'call' ? (
-                          <Phone className="h-4 w-4 text-gray-500" />
-                        ) : (
-                          <Mail className="h-4 w-4 text-gray-500" />
-                        )}
-                        <span className="capitalize">{activity.type}</span>
+                        {getActivityIcon(activity)}
+                        <span>{getActivityLabel(activity)}</span>
                       </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs">
+                      <span className="text-gray-600 text-sm">
+                        {truncateMessage(activity.message)}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className={activityStatusColors[activity.status] || 'text-gray-600'}>
                         {activity.status}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-gray-500">
-                      {activity.prospect?.phone || '-'}
                     </TableCell>
                     <TableCell className="text-right text-gray-500">
                       {activity.sentAt
